@@ -1,0 +1,89 @@
+# ---------------------------------------------------------------
+# Secrets: TLS keys, certificates and PSKs.
+# Regenerate with tests/keys/ca_cert_pkey_psk.sh.
+# ---------------------------------------------------------------
+tests/keys/*
+!tests/keys/ca_cert_pkey_psk.sh
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+*.p12
+*.pfx
+*psk*.txt
+.env
+.env.*
+
+# ---------------------------------------------------------------
+# Autotools generated files (recreate with ./autogen.sh && ./configure)
+# ---------------------------------------------------------------
+Makefile
+Makefile.in
+!modules/net/quic/Makefile
+aclocal.m4
+autom4te.cache/
+ar-lib
+compile
+config.guess
+config.h
+config.h.in
+config.log
+config.status
+config.sub
+configure
+depcomp
+install-sh
+libtool
+ltmain.sh
+missing
+stamp-h1
+*.pc
+
+# ---------------------------------------------------------------
+# Compiler / libtool output
+# ---------------------------------------------------------------
+*.o
+*.lo
+*.la
+*.lai
+*.a
+*.so
+*.so.*
+.deps/
+.libs/
+
+# ---------------------------------------------------------------
+# Linux kernel module build output (kbuild)
+# ---------------------------------------------------------------
+*.ko
+*.mod
+*.mod.c
+*.cmd
+Module.symvers
+modules.order
+.tmp_versions/
+
+# ---------------------------------------------------------------
+# Test binaries
+# ---------------------------------------------------------------
+tests/alpn_test
+tests/func_test
+tests/http3_test
+tests/perf_test
+tests/pto_test
+tests/sample_test
+tests/ticket_test
+tests/interop/interop_test
+tests/myTests/msg_client
+tests/myTests/msg_server
+
+# ---------------------------------------------------------------
+# Editors / OS / Claude local settings
+# ---------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+.claude/settings.local.json
