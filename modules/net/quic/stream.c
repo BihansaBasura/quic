@@ -35,7 +35,7 @@ static bool quic_stream_id_valid(s64 stream_id, bool is_serv, bool send)
 	return type != QUIC_STREAM_TYPE_CLIENT_UNI;
 }
 
-/* Check if a stream ID was initiated locally. */
+/* Check if a stream ID belongs to the local endpoint. */
 static bool quic_stream_id_local(s64 stream_id, bool is_serv)
 {
 	return is_serv ^ !(stream_id & QUIC_STREAM_TYPE_SERVER_MASK);
@@ -175,13 +175,14 @@ free:
 	return NULL;
 }
 
-/* Check if a send or receive stream ID is already closed. */
+/* Check if a stream ID was already used. */
 static bool quic_stream_id_closed(struct quic_stream_table *streams,
-				  s64 stream_id, bool send)
+				  s64 stream_id, bool is_serv)
 {
-	struct quic_stream_limits *limits = send ? &streams->send :
-						   &streams->recv;
+	bool local = quic_stream_id_local(stream_id, is_serv);
+	struct quic_stream_limits *limits;
 
+	limits = local ? &streams->send : &streams->recv;
 	if (quic_stream_id_uni(stream_id))
 		return stream_id < limits->next_uni_stream_id;
 	return stream_id < limits->next_bidi_stream_id;
@@ -239,16 +240,12 @@ struct quic_stream *quic_stream_get(struct quic_stream_table *streams,
 	if (stream)
 		return stream;
 
-	if (!send && quic_stream_id_local(stream_id, is_serv)) {
-		if (quic_stream_id_closed(streams, stream_id, !send))
-			return ERR_PTR(-ENOSTR);
-		return ERR_PTR(-EINVAL);
-	}
-	if (send && !quic_stream_id_local(stream_id, is_serv))
-		return ERR_PTR(-EINVAL);
-
-	if (quic_stream_id_closed(streams, stream_id, send))
+	if (quic_stream_id_closed(streams, stream_id, is_serv))
 		return ERR_PTR(-ENOSTR);
+
+	/* Cannot create if the other side must initiate this stream. */
+	if (send != quic_stream_id_local(stream_id, is_serv))
+		return ERR_PTR(-EINVAL);
 
 	if (!(flags & MSG_QUIC_STREAM_NEW))
 		return ERR_PTR(-EINVAL);
@@ -262,7 +259,7 @@ struct quic_stream *quic_stream_get(struct quic_stream_table *streams,
 		return ERR_PTR(-ENOMEM);
 
 	if (send || quic_stream_id_valid(stream_id, is_serv, !send))
-		streams->send.active_stream_id = stream_id;
+		streams->active_stream_id = stream_id;
 
 	return stream;
 }
@@ -359,6 +356,7 @@ int quic_stream_init(struct quic_stream_table *streams)
 	for (i = 0; i < QUIC_STREAM_HT_SIZE; i++)
 		INIT_HLIST_HEAD(&head[i]);
 	streams->head = head;
+	streams->active_stream_id = -1;
 	return 0;
 }
 
@@ -408,7 +406,6 @@ void quic_stream_set_param(struct quic_stream_table *streams,
 	limits->max_stream_data_uni = p->max_stream_data_uni;
 	limits->max_streams_bidi = p->max_streams_bidi;
 	limits->max_streams_uni = p->max_streams_uni;
-	limits->active_stream_id = -1;
 
 	if (p->remote ^ is_serv) {
 		bidi_type = QUIC_STREAM_TYPE_CLIENT_BIDI;
@@ -420,9 +417,11 @@ void quic_stream_set_param(struct quic_stream_table *streams,
 
 	limits->max_bidi_stream_id =
 		quic_stream_streams_to_id(p->max_streams_bidi, bidi_type);
-	limits->next_bidi_stream_id = bidi_type;
+	if (limits->next_bidi_stream_id < bidi_type)
+		limits->next_bidi_stream_id = bidi_type;
 
 	limits->max_uni_stream_id =
 		quic_stream_streams_to_id(p->max_streams_uni, uni_type);
-	limits->next_uni_stream_id = uni_type;
+	if (limits->next_uni_stream_id < uni_type)
+		limits->next_uni_stream_id = uni_type;
 }

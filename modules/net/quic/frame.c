@@ -656,8 +656,8 @@ quic_frame_reset_stream_create(struct sock *sk, void *data, u8 type, gfp_t gfp)
 	frame->stream = stream;
 
 	/* Clear active stream ID if this stream was active. */
-	if (streams->send.active_stream_id == stream->id)
-		streams->send.active_stream_id = -1;
+	if (streams->active_stream_id == stream->id)
+		streams->active_stream_id = -1;
 
 	return frame;
 }
@@ -1228,6 +1228,14 @@ static int quic_frame_ack_process(struct sock *sk, struct quic_frame *frame,
 	delay <<= outq->ack_delay_exponent;
 	if (quic_is_established(sk) && delay > cong->max_ack_delay)
 		delay = cong->max_ack_delay;
+
+	/* rfc9002#section-7.8:
+	 *
+	 * Snapshot whether the sender was cwnd-limited before processing this
+	 * ACK batch. One MSS of slack matches the send-path blocking check.
+	 */
+	cong->window_limited = outq->inflight + cong->mss > outq->window;
+
 	/* ACK transmitted packets within [smallest, largest] range. */
 	quic_outq_transmitted_sack(sk, level, (s64)largest, (s64)smallest,
 				   (s64)largest, delay, &time, gfp);

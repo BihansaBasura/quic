@@ -64,7 +64,6 @@ static void quic_udp_sock_put_work(struct work_struct *work)
 	__hlist_del(&us->node);
 	mutex_unlock(&head->lock);
 
-	put_net_track(sock_net(sk), &us->ns_tracker);
 	sock_put(sk);
 	kfree(us);
 }
@@ -105,7 +104,6 @@ static struct quic_udp_sock *quic_udp_sock_create(struct sock *sk,
 	us->sk = sock->sk;
 	memcpy(&us->addr, a, sizeof(*a));
 	us->bind_ifindex = udp_conf.bind_ifindex;
-	get_net_track(net, &us->ns_tracker, GFP_KERNEL);
 
 	INIT_WORK(&us->work, quic_udp_sock_put_work);
 	head = quic_udp_sock_head(net, ntohs(a->v4.sin_port));
@@ -405,6 +403,10 @@ u32 quic_path_pl_send(struct quic_path_group *paths, s64 number)
 {
 	u32 pathmtu = 0;
 
+	pr_debug("%s entry: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
+		 __func__, paths, paths->pl.state, paths->pl.pmtu,
+		 paths->pl.probe_size, paths->pl.probe_high);
+
 	paths->pl.number = number;
 	if (paths->pl.probe_count < QUIC_MAX_PROBES)
 		goto out;
@@ -444,7 +446,7 @@ u32 quic_path_pl_send(struct quic_path_group *paths, s64 number)
 	}
 
 out:
-	pr_debug("%s: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
+	pr_debug("%s exit: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
 		 __func__, paths, paths->pl.state, paths->pl.pmtu,
 		 paths->pl.probe_size, paths->pl.probe_high);
 	paths->pl.probe_count++;
@@ -467,7 +469,7 @@ u32 quic_path_pl_recv(struct quic_path_group *paths, bool *raise_timer,
 	u32 pathmtu = 0;
 	u16 next;
 
-	pr_debug("%s: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
+	pr_debug("%s entry: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
 		 __func__, paths, paths->pl.state, paths->pl.pmtu,
 		 paths->pl.probe_size, paths->pl.probe_high);
 
@@ -491,7 +493,7 @@ u32 quic_path_pl_recv(struct quic_path_group *paths, bool *raise_timer,
 				paths->pl.probe_size =
 					min_t(u16, next, QUIC_MAX_PLPMTU);
 				*complete = false;
-				return 0;
+				goto out;
 			}
 			paths->pl.probe_high = QUIC_MAX_PLPMTU;
 		}
@@ -515,6 +517,11 @@ u32 quic_path_pl_recv(struct quic_path_group *paths, bool *raise_timer,
 	}
 
 	*complete = (paths->pl.state == QUIC_PL_COMPLETE);
+
+out:
+	pr_debug("%s exit: paths: %p, state: %d, pmtu: %d, size: %d, high: %d\n",
+		 __func__, paths, paths->pl.state, paths->pl.pmtu,
+		 paths->pl.probe_size, paths->pl.probe_high);
 	return pathmtu;
 }
 
@@ -531,13 +538,13 @@ u32 quic_path_pl_toobig(struct quic_path_group *paths, u32 pmtu,
 {
 	u32 pathmtu = 0;
 
-	pr_debug("%s: paths: %p, state: %d, pmtu: %d, size: %d, ptb: %u\n",
+	pr_debug("%s entry: paths: %p, state: %d, pmtu: %d, size: %d, ptb: %u\n",
 		 __func__, paths, paths->pl.state, paths->pl.pmtu,
 		 paths->pl.probe_size, pmtu);
 
 	*reset_timer = false;
 	if (pmtu < QUIC_MIN_PLPMTU || pmtu >= (u32)paths->pl.probe_size)
-		return pathmtu;
+		goto out;
 
 	if (paths->pl.state == QUIC_PL_BASE) {
 		if (pmtu < QUIC_BASE_PLPMTU) {
@@ -572,6 +579,11 @@ u32 quic_path_pl_toobig(struct quic_path_group *paths, u32 pmtu,
 			*reset_timer = true;
 		}
 	}
+
+out:
+	pr_debug("%s exit: paths: %p, state: %d, pmtu: %d, size: %d, ptb: %u\n",
+		 __func__, paths, paths->pl.state, paths->pl.pmtu,
+		 paths->pl.probe_size, pmtu);
 	return pathmtu;
 }
 
